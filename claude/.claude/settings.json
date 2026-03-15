@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "model": "opus",
+  "statusLine": {
+    "type": "command",
+    "command": "input=$(cat); cwd=$(echo \"$input\" | jq -r '.workspace.current_dir'); model=$(echo \"$input\" | jq -r '.model.display_name'); dir_name=$(basename \"$cwd\"); cd \"$cwd\" 2>/dev/null && branch=$(git -c advice.detachedHead=false -c core.useBuiltinFSMonitor=false rev-parse --abbrev-ref HEAD 2>/dev/null); if [ -n \"$branch\" ]; then printf '\\033[36m%s\\033[0m \\033[90mon\\033[0m \\033[35m%s\\033[0m \\033[90m|\\033[0m \\033[34m%s\\033[0m' \"$dir_name\" \"$branch\" \"$model\"; else printf '\\033[36m%s\\033[0m \\033[90m|\\033[0m \\033[34m%s\\033[0m' \"$dir_name\" \"$model\"; fi"
+  },
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true
+  },
+  "alwaysThinkingEnabled": true
+}

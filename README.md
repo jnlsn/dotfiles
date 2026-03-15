@@ -6,7 +6,10 @@ Personal dotfiles managed with [GNU Stow](https://www.gnu.org/software/stow/).
 
 | Package | Manages | Target |
 |---------|---------|--------|
+| `claude` | Claude Code settings (model, status line, plugins) | `~/.claude/settings.json` |
+| `gh` | GitHub CLI config (aliases, protocol, editor) | `~/.config/gh/config.yml` |
 | `ghostty` | Terminal config (padding, cursor style) | `~/.config/ghostty/config` |
+| `git` | Global gitignore | `~/.config/git/ignore` |
 | `vscode` | Editor settings (formatting, linting, TypeScript) | `~/Library/Application Support/Code/User/settings.json` |
 | `zsh` | Shell config (Oh My Zsh, plugins, PATH) | `~/.zshrc`, `~/.zprofile` |
 
@@ -34,5 +37,5 @@ git clone https://github.com/zsh-users/zsh-syntax-highlighting ~/.oh-my-zsh/cust
 ```bash
 git clone git@github.com:dustin-riley/dotfiles.git ~/dotfiles
 cd ~/dotfiles
-stow -t ~ ghostty vscode zsh
+stow -t ~ claude gh ghostty git vscode zsh
 ```
