@@ -6,7 +6,7 @@ ZSH_THEME="agnoster"
 HYPHEN_INSENSITIVE="true"
 COMPLETION_WAITING_DOTS="true"
 
-plugins=(git z zsh-autosuggestions zsh-syntax-highlighting)
+plugins=(git z brew copypath macos npm sudo zsh-autosuggestions zsh-syntax-highlighting)
 
 source $ZSH/oh-my-zsh.sh
 
