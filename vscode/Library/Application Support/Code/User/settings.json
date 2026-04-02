@@ -18,6 +18,7 @@
     "typescript.suggest.autoImports": true,
     "typescript.updateImportsOnFileMove.enabled": "always",
     "git.confirmSync": false,
+    "typescript.experimental.useTsgo": true,
     "files.exclude": {
         "**/.git": true,
         "**/node_modules": true,
