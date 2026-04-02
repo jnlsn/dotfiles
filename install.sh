@@ -2,28 +2,38 @@
 set -euo pipefail
 
 DOTFILES="$(cd "$(dirname "$0")" && pwd)"
+OS="$(uname -s)"
 
 info() { printf '\033[34m[info]\033[0m %s\n' "$1"; }
 skip() { printf '\033[33m[skip]\033[0m %s\n' "$1"; }
 ok()   { printf '\033[32m[ ok ]\033[0m %s\n' "$1"; }
 
-# Homebrew
-if ! command -v brew &>/dev/null; then
-    info "Installing Homebrew..."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    eval "$(/opt/homebrew/bin/brew shellenv)"
-    ok "Homebrew installed"
-else
-    skip "Homebrew already installed"
-fi
+# Package manager setup & GNU Stow
+if [ "$OS" = "Darwin" ]; then
+    if ! command -v brew &>/dev/null; then
+        info "Installing Homebrew..."
+        NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+        ok "Homebrew installed"
+    else
+        skip "Homebrew already installed"
+    fi
 
-# GNU Stow
-if ! command -v stow &>/dev/null; then
-    info "Installing GNU Stow..."
-    brew install stow
-    ok "Stow installed"
+    if ! command -v stow &>/dev/null; then
+        info "Installing GNU Stow..."
+        brew install stow
+        ok "Stow installed"
+    else
+        skip "Stow already installed"
+    fi
 else
-    skip "Stow already installed"
+    if ! command -v stow &>/dev/null; then
+        info "Installing GNU Stow..."
+        sudo apt-get update -qq && sudo apt-get install -y -qq stow
+        ok "Stow installed"
+    else
+        skip "Stow already installed"
+    fi
 fi
 
 # Oh My Zsh
@@ -53,8 +63,13 @@ else
     skip "zsh-syntax-highlighting already installed"
 fi
 
-# Stow all packages
-info "Stowing dotfiles..."
+# Stow packages — only stow macOS-specific packages on Darwin
+PACKAGES="claude gh git zsh"
+if [ "$OS" = "Darwin" ]; then
+    PACKAGES="$PACKAGES ghostty vscode"
+fi
+
+info "Stowing dotfiles ($PACKAGES)..."
 cd "$DOTFILES"
-stow -t ~ claude gh ghostty git vscode zsh
+stow -t ~ $PACKAGES
 ok "All packages stowed"
