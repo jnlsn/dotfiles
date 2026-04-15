@@ -95,3 +95,51 @@ if [ "$(getent passwd "$(id -un)" | cut -d: -f7)" != "/usr/bin/zsh" ]; then
 else
     skip "Default shell already zsh"
 fi
+
+# EFS network directory — persist credentials across Ona instances.
+# Set EFS_MOUNT_POINT in Ona secrets to enable (e.g. /efs).
+# Docs: https://docs.google.com/document/d/1sypPRmiGrbh4g2UmbkNNLo8ELKG7mSK_Avs7vyx2KPk
+EFS_DIR="${EFS_MOUNT_POINT:-}"
+if [ -n "$EFS_DIR" ] && [ -d "$EFS_DIR" ]; then
+    info "EFS mount detected at $EFS_DIR — linking credentials..."
+
+    # Links a file or directory from $HOME to $EFS_DIR. Migrates existing
+    # content on first run, then creates a symlink for future instances.
+    link_to_efs() {
+        local name="$1"
+        local src="$HOME/$name"
+        local dst="$EFS_DIR/$name"
+
+        # Already correct
+        if [ -L "$src" ] && [ "$(readlink "$src")" = "$dst" ]; then
+            return
+        fi
+
+        # Migrate existing file/dir to EFS if destination doesn't exist yet
+        if [ ! -e "$dst" ] && [ -e "$src" ] && [ ! -L "$src" ]; then
+            mkdir -p "$(dirname "$dst")"
+            mv "$src" "$dst"
+        fi
+
+        # Remove stale real file/dir or wrong symlink at src
+        if [ -e "$src" ] || [ -L "$src" ]; then
+            rm -rf "$src"
+        fi
+
+        mkdir -p "$(dirname "$src")"
+        mkdir -p "$(dirname "$dst")"
+        ln -s "$dst" "$src"
+    }
+
+    link_to_efs ".claude.json"              # Claude Code OAuth + API key
+    link_to_efs ".claude/.credentials.json"  # Claude Code credentials
+    link_to_efs ".config/gh/hosts.yml"       # GitHub CLI auth
+    link_to_efs ".config/acli"               # Atlassian CLI auth
+    link_to_efs ".aws"                       # AWS config
+    link_to_efs ".zsh_history"               # Shell history
+    link_to_efs ".terminfo"                  # Ghostty terminfo
+
+    ok "EFS credential symlinks configured"
+else
+    skip "No EFS mount found (set EFS_MOUNT_POINT in Ona secrets to enable)"
+fi
