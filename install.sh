@@ -167,11 +167,14 @@ fi
 # Set EFS_MOUNT_POINT in Ona secrets to enable (e.g. /efs).
 # Docs: https://docs.google.com/document/d/1sypPRmiGrbh4g2UmbkNNLo8ELKG7mSK_Avs7vyx2KPk
 EFS_DIR="${EFS_MOUNT_POINT:-}"
-if [ -n "$EFS_DIR" ] && [ -d "$EFS_DIR" ]; then
-    info "EFS mount detected at $EFS_DIR — linking credentials..."
+if [ -n "$EFS_DIR" ]; then
+    # EFS may not be mounted yet (dotfiles can run before post-start.sh).
+    # Create symlinks anyway — they'll resolve once the mount completes.
+    info "EFS_MOUNT_POINT=$EFS_DIR — linking credentials (mount may still be in progress)..."
 
-    # Links a file or directory from $HOME to $EFS_DIR. Migrates existing
-    # content on first run, then creates a symlink for future instances.
+    # Links a file or directory from $HOME to $EFS_DIR. On the first machine
+    # where a file exists locally but not yet on EFS, migrates it over.
+    # On subsequent machines, just creates the symlink.
     link_to_efs() {
         local name="$1"
         local src="$HOME/$name"
@@ -183,7 +186,7 @@ if [ -n "$EFS_DIR" ] && [ -d "$EFS_DIR" ]; then
         fi
 
         # Migrate existing file/dir to EFS if destination doesn't exist yet
-        if [ ! -e "$dst" ] && [ -e "$src" ] && [ ! -L "$src" ]; then
+        if [ -d "$EFS_DIR" ] && [ ! -e "$dst" ] && [ -e "$src" ] && [ ! -L "$src" ]; then
             mkdir -p "$(dirname "$dst")"
             mv "$src" "$dst"
         fi
@@ -194,7 +197,6 @@ if [ -n "$EFS_DIR" ] && [ -d "$EFS_DIR" ]; then
         fi
 
         mkdir -p "$(dirname "$src")"
-        mkdir -p "$(dirname "$dst")"
         ln -s "$dst" "$src"
     }
 
@@ -208,5 +210,5 @@ if [ -n "$EFS_DIR" ] && [ -d "$EFS_DIR" ]; then
 
     ok "EFS credential symlinks configured"
 else
-    skip "No EFS mount found (set EFS_MOUNT_POINT in Ona secrets to enable)"
+    skip "EFS_MOUNT_POINT not set (set it in Ona secrets to enable)"
 fi
