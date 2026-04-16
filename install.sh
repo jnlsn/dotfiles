@@ -98,7 +98,6 @@ fi
 
 # EFS network directory — persist credentials across Ona instances.
 # Set EFS_MOUNT_POINT in Ona secrets to enable (e.g. /efs).
-# Docs: https://docs.google.com/document/d/1sypPRmiGrbh4g2UmbkNNLo8ELKG7mSK_Avs7vyx2KPk
 EFS_DIR="${EFS_MOUNT_POINT:-}"
 if [ -n "$EFS_DIR" ]; then
     # EFS may not be mounted yet (dotfiles can run before post-start.sh).

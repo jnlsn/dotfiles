@@ -32,5 +32,10 @@
     },
     "[markdown]": {
         "files.trimTrailingWhitespace": false
-    }
+    },
+    "remote.SSH.remotePlatform": {
+        "*.gitpod.local": "linux",
+        "*.gitpod.remote": "linux"
+    },
+    "task.allowAutomaticTasks": "on"
 }
