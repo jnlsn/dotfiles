@@ -36,6 +36,30 @@ else
     fi
 fi
 
+# Zellij
+if ! command -v zellij &>/dev/null; then
+    info "Installing Zellij..."
+    if [ "$OS" = "Darwin" ]; then
+        brew install zellij
+    else
+        case "$(uname -m)" in
+            x86_64)  ZELLIJ_ARCH="x86_64-unknown-linux-musl" ;;
+            aarch64) ZELLIJ_ARCH="aarch64-unknown-linux-musl" ;;
+            *) echo "Unsupported arch: $(uname -m)" >&2; exit 1 ;;
+        esac
+        mkdir -p "$HOME/.local/bin"
+        tmp="$(mktemp -d)"
+        curl -fsSL -o "$tmp/zellij.tar.gz" \
+            "https://github.com/zellij-org/zellij/releases/latest/download/zellij-${ZELLIJ_ARCH}.tar.gz"
+        tar xzf "$tmp/zellij.tar.gz" -C "$tmp"
+        mv "$tmp/zellij" "$HOME/.local/bin/zellij"
+        rm -rf "$tmp"
+    fi
+    ok "Zellij installed"
+else
+    skip "Zellij already installed"
+fi
+
 # Oh My Zsh
 if [ ! -d "$HOME/.oh-my-zsh" ]; then
     info "Installing Oh My Zsh..."
