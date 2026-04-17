@@ -102,6 +102,29 @@ Cloud devcontainers are ephemeral — credentials wiped on every new instance is
 
 The linked paths contain live credentials. EFS here is assumed to be private to your user account. Don't point `EFS_MOUNT_POINT` at anything shared with other humans.
 
+## Forking this repo
+
+If you're adopting this as a starting point for your own dotfiles, change these before running `install.sh` — everything else is personal preference you can edit later without consequence.
+
+### Must change
+
+- **Git identity** in `git/.config/git/config`. Replace `name` and `email` with yours. If you skip this, every commit you make after stowing will be attributed to me. Use your provider's `noreply` email (e.g. `<id>+<username>@users.noreply.github.com`) if you don't want your real address in git history.
+- **Clone URL** in the [Quick start](#quick-start) above — point it at your fork.
+
+### Worth reviewing before you run
+
+- **Claude Code settings** (`claude/.claude/settings.json`):
+  - `model: opus` — Opus is expensive; consider `sonnet` or `haiku` if you're cost-conscious.
+  - `skipDangerousModePermissionPrompt: true` — disables the confirmation prompt for dangerous-mode actions. Reasonable in ephemeral cloud devcontainers; a conscious trust tradeoff on a personal laptop.
+  - `enabledPlugins` — `pup` is Datadog-specific. Drop it (and the `datadog-pup` marketplace entry) if you don't work at Datadog/Vanta-adjacent infra.
+- **`gh` protocol** (`gh/.config/gh/config.yml`): set to `ssh`. Switch to `https` if you don't use SSH keys with GitHub.
+- **Zsh theme** (`zsh/.zshrc`): `agnoster` requires a Powerline-patched font. Pick a different `ZSH_THEME` if yours doesn't have one.
+- **Ghostty + Zellij keybinds** are tuned around a specific tradeoff (keeping Option+Arrow for shell word-nav, putting pane-nav on Option+Shift+Arrow). If you don't share that constraint, simpler defaults may fit you better — see the bullets under [Notable config choices](#notable-config-choices).
+
+### EFS / Ona persistence
+
+Entirely optional. If you don't use Ona or don't have a persistent mount, leave `EFS_MOUNT_POINT` unset and the script skips that step. Nothing else needs to change.
+
 ## Modifying and iterating
 
 - **Edit a config:** edit the file in this repo (or edit the symlinked target — same thing) and commit.
