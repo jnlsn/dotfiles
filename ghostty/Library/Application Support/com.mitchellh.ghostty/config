@@ -11,3 +11,12 @@ theme = Birds of Paradise
 macos-option-as-alt = left
 
 keybind = shift+enter=text:\x1b\r
+
+# Override Ghostty's default alt+arrow = readline word-nav (ESC b / ESC f).
+# Those defaults fire before normal key encoding, so zellij would decode
+# Option+Right as Alt+f (ToggleFloatingPanes) instead of Alt+Right (MoveFocus).
+# Send explicit CSI modifier-3 sequences so zellij gets real Alt+Arrow.
+keybind = alt+left=csi:1;3D
+keybind = alt+right=csi:1;3C
+keybind = alt+up=csi:1;3A
+keybind = alt+down=csi:1;3B
