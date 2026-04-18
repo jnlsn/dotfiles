@@ -25,13 +25,14 @@ SESSION_NAME=$(echo "$input" | jq -r '.session_name // empty')
 # Git root
 GIT_ROOT=$(git -C "$FULL_DIR" rev-parse --show-toplevel 2>/dev/null)
 
-# Directory — relative to git root (shell substitution works on BSD + GNU; GNU
-# realpath's --relative-to is unavailable on macOS).
+# Directory — show repo basename, with any subpath appended so the statusline
+# always tells you which repo you're in (e.g. "dotfiles" or "dotfiles/claude").
 if [ -n "$GIT_ROOT" ]; then
+    REPO_NAME="${GIT_ROOT##*/}"
     if [ "$FULL_DIR" = "$GIT_ROOT" ]; then
-        DIR="~"
+        DIR="$REPO_NAME"
     else
-        DIR="${FULL_DIR#$GIT_ROOT/}"
+        DIR="$REPO_NAME/${FULL_DIR#$GIT_ROOT/}"
     fi
 else
     DIR="$FULL_DIR"
