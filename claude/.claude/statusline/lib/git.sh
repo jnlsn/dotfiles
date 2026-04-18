@@ -58,8 +58,9 @@ DIFF_ADD=0
 DIFF_DEL=0
 if [ -n "$BRANCH" ] && [ -n "$DIRTY" ]; then
     DIFF_STAT=$(git -C "$FULL_DIR" --no-optional-locks diff HEAD --shortstat 2>/dev/null)
-    DIFF_ADD=$(echo "$DIFF_STAT" | grep -oP '[0-9]+(?= insertion)' || echo "0")
-    DIFF_DEL=$(echo "$DIFF_STAT" | grep -oP '[0-9]+(?= deletion)' || echo "0")
+    # sed instead of grep -oP: PCRE lookahead unavailable in BSD grep on macOS.
+    DIFF_ADD=$(echo "$DIFF_STAT" | sed -nE 's/.*[[:space:]]([0-9]+) insertion.*/\1/p')
+    DIFF_DEL=$(echo "$DIFF_STAT" | sed -nE 's/.*[[:space:]]([0-9]+) deletion.*/\1/p')
     [ -z "$DIFF_ADD" ] && DIFF_ADD=0
     [ -z "$DIFF_DEL" ] && DIFF_DEL=0
 fi

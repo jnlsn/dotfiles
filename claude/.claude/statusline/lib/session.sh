@@ -25,10 +25,14 @@ SESSION_NAME=$(echo "$input" | jq -r '.session_name // empty')
 # Git root
 GIT_ROOT=$(git -C "$FULL_DIR" rev-parse --show-toplevel 2>/dev/null)
 
-# Directory — relative to git root
+# Directory — relative to git root (shell substitution works on BSD + GNU; GNU
+# realpath's --relative-to is unavailable on macOS).
 if [ -n "$GIT_ROOT" ]; then
-    DIR=$(realpath --relative-to="$GIT_ROOT" "$FULL_DIR")
-    [ "$DIR" = "." ] && DIR="~"
+    if [ "$FULL_DIR" = "$GIT_ROOT" ]; then
+        DIR="~"
+    else
+        DIR="${FULL_DIR#$GIT_ROOT/}"
+    fi
 else
     DIR="$FULL_DIR"
 fi
@@ -37,7 +41,7 @@ fi
 FRIENDLY_NAME=""
 ENV_URL=""
 if [ -n "$CODESPACE_NAME" ]; then
-    FRIENDLY_NAME=$(echo "$CODESPACE_NAME" | grep -oP '^[^-]+-[^-]+' || echo "$CODESPACE_NAME")
+    FRIENDLY_NAME=$(echo "$CODESPACE_NAME" | grep -oE '^[^-]+-[^-]+' || echo "$CODESPACE_NAME")
     ENV_URL="https://github.com/VantaInc/obsidian/codespaces"
 elif [ "$IS_ON_ONA" = "true" ]; then
     # ona CLI only sees the current environment even when multiple are running
@@ -51,7 +55,7 @@ elif [ "$IS_ON_ONA" = "true" ]; then
             ENV_URL="${ONA_BASE_URL:-https://app.gitpod.io}/details/${ONA_ID}"
         fi
         SHORT_ID=""
-        [ -n "$ONA_ID" ] && SHORT_ID=$(echo "$ONA_ID" | grep -oP '[^-]+$' | cut -c1-7)
+        [ -n "$ONA_ID" ] && SHORT_ID=$(printf '%s' "${ONA_ID##*-}" | cut -c1-7)
         if [ -n "$ONA_NAME" ]; then
             FRIENDLY_NAME="${ONA_NAME}${SHORT_ID:+ $SHORT_ID}"
         elif [ -n "$ONA_BRANCH" ]; then
