@@ -112,13 +112,15 @@ cd "$DOTFILES"
 stow -t ~ $PACKAGES
 ok "All packages stowed"
 
-# Set zsh as default shell
-if [ "$(getent passwd "$(id -un)" | cut -d: -f7)" != "/usr/bin/zsh" ]; then
-    info "Setting default shell to zsh..."
-    sudo chsh "$(id -un)" --shell "/usr/bin/zsh"
-    ok "Default shell set to zsh"
-else
-    skip "Default shell already zsh"
+# Set zsh as default shell (Linux only — macOS ships with zsh as default).
+if [ "$OS" = "Linux" ]; then
+    if [ "$(getent passwd "$(id -un)" | cut -d: -f7)" != "/usr/bin/zsh" ]; then
+        info "Setting default shell to zsh..."
+        sudo chsh "$(id -un)" --shell "/usr/bin/zsh"
+        ok "Default shell set to zsh"
+    else
+        skip "Default shell already zsh"
+    fi
 fi
 
 # EFS network directory — persist credentials across Ona instances.
