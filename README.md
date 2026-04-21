@@ -67,7 +67,7 @@ Read the script — it's ~170 lines and stays that way deliberately. But since i
 - **Zellij is installed unconditionally**, including on Ona instances. It's not wired into `.zshrc` as auto-start, so nothing changes unless you invoke `zellij`, but the binary will be on disk. If you don't want it, delete the Zellij block in `install.sh` before running.
 - **Conflicting dotfiles are renamed to `.bak`**, not deleted. If `~/.zshrc` exists as a regular file, it becomes `~/.zshrc.bak` and the stow symlink takes over. Re-running the installer won't overwrite an existing `.bak` — so if you re-bootstrap twice, the oldest backup is what sticks around.
 - **`PATH` precedence** (from `zsh/.zshrc`): `~/.local/bin` → `~/bin` → `/opt/homebrew/opt/libpq/bin` → system. Anything you drop into `~/.local/bin` (including the Linux-installed Zellij) wins over Homebrew and system binaries.
-- **SSH TTY fix:** `.zshrc` disables terminal mode 1034 (`meta-sends-escape`) over SSH. This is a workaround for Ghostty's `xterm-ghostty` `TERM` causing double-character rendering on remote hosts. Harmless if you don't use Ghostty.
+- **Ghostty terminfo fallback:** `.zshrc` falls back to `TERM=xterm-256color` (before `oh-my-zsh` loads) on hosts that don't have an `xterm-ghostty` terminfo entry. Without the fallback, `zsh-autosuggestions`/`zsh-syntax-highlighting` drive ZLE against an unknown terminal and every keystroke renders twice. Common on Ubuntu ≤ ncurses 6.4 (Ona, Gitpod, many Debian derivatives). No-op on hosts that *do* have the entry (recent macOS/Homebrew ncurses), so the full Ghostty capability set is preserved there.
 
 ## Ona / Gitpod
 
