@@ -1,0 +1,4 @@
+# gh CLI auth — stowed into this repo's tree via `stow gh` so the file
+# exists at gh/.config/gh/hosts.yml, but it contains the OAuth token and
+# must never be committed.
+gh/.config/gh/hosts.yml
