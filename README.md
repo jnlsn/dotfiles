@@ -38,14 +38,14 @@ Linux installs omit `ghostty` and `vscode` (macOS-only targets).
 - **Git identity is committed.** `git/.config/git/config` hard-codes `Dustin Riley` and a GitHub `noreply` email as the global identity. If you fork this, change it before running `install.sh` or your commits will be attributed to me.
 - **`gh` uses SSH**, not HTTPS. You'll need an SSH key registered with GitHub before `gh` clones/pushes work.
 - **Claude Code runs Opus by default** with `alwaysThinkingEnabled: true` and `skipDangerousModePermissionPrompt: true`. The latter disables the dangerous-mode confirmation prompt, which is fine in ephemeral cloud devcontainers but is a conscious trust tradeoff on a personal laptop. Review `claude/.claude/settings.json` and decide for yourself.
-- **Enabled Claude plugins:** `frontend-design`, `code-review`, and `pup` (from the `datadog-labs/pup` marketplace). These are fetched by Claude Code itself, not by `install.sh`.
+- **Enabled Claude plugins:** `frontend-design`, `code-review`, and `pup` (from the `datadog-labs/pup` marketplace). The plugins themselves are fetched by Claude Code; the `pup` binary they shell out to is installed by `install.sh` on Linux (see below).
 - **VS Code** enables format-on-save with Prettier, auto-runs ESLint fixes and import organization on save, and turns on the experimental TypeScript Go server (`typescript.experimental.useTsgo`).
 - **Ghostty** uses the `Birds of Paradise` theme and binds `shift+enter` to send a literal escape+CR (useful for multi-line input in REPLs/TUIs that treat bare Enter as submit). `macos-option-as-alt = left` remaps Left Option to Alt, leaving Right Option free for macOS special characters (∆, ˚, ¬). Option+Arrow is left on its default readline word-nav (`ESC b` / `ESC f`) so word-by-word cursor movement still works in shells/REPLs.
 - **Zellij** enables the Kitty keyboard protocol (`support_kitty_keyboard_protocol true`) so modifier-key combos like Option+Shift+Arrow encode distinctly. Pane navigation is bound to **Option+Shift+Arrow** (and `Alt+h/j/k/l`), not plain Option+Arrow — the latter is reserved for shell word-nav. `ToggleFloatingPanes` is `Alt+Shift+f` for the same reason (plain `Alt+f` collides with word-forward `ESC f`).
 
 ## What `install.sh` actually does
 
-Read the script — it's ~170 lines and stays that way deliberately. But since it modifies a fresh system, here's what to expect before you run it:
+Read the script — it's ~270 lines and stays small deliberately. But since it modifies a fresh system, here's what to expect before you run it:
 
 ### Always installs
 
@@ -61,6 +61,8 @@ Read the script — it's ~170 lines and stays that way deliberately. But since i
 ### Linux only
 
 - **Changes your default shell to zsh** using `sudo chsh`. Skipped if zsh is already default. This is why `install.sh` may prompt for `sudo`.
+- **Installs `pup`** (Datadog CLI) to `~/.local/bin/pup` from the latest GitHub release, if missing. The `pup` Claude plugin's agents all shell out to the binary, so skipping this makes them non-functional. On macOS, install via `brew tap datadog-labs/pack && brew install pup` instead.
+- **Auto-authenticates ACLI** if `JIRA_API_TOKEN` is set in the environment — see [ACLI auth](#acli-auth).
 
 ### Opinionated decisions worth flagging
 
@@ -90,7 +92,7 @@ Cloud devcontainers are ephemeral — credentials wiped on every new instance is
 | `~/.claude.json`               | Claude Code OAuth token + API key         |
 | `~/.claude/.credentials.json`  | Claude Code credentials                   |
 | `~/.config/gh/hosts.yml`       | GitHub CLI auth                           |
-| `~/.config/acli`               | Atlassian CLI auth                        |
+| `~/.config/acli`               | Atlassian CLI non-secret config (site, email) — token lives in the OS keyring, see [ACLI auth](#acli-auth) |
 | `~/.aws`                       | AWS SDK config + credentials              |
 | `~/.zsh_history`               | Shell history                             |
 
@@ -101,6 +103,14 @@ Cloud devcontainers are ephemeral — credentials wiped on every new instance is
 ### Security note
 
 The linked paths contain live credentials. EFS here is assumed to be private to your user account. Don't point `EFS_MOUNT_POINT` at anything shared with other humans.
+
+### ACLI auth
+
+ACLI stores its OAuth/API token in the OS keyring (libsecret via DBus), not on disk — so even with `~/.config/acli` linked to EFS, every fresh Ona instance boots logged out. The fix is a non-interactive re-auth on each boot using a long-lived API token.
+
+**How to enable it:** create an API token at <https://id.atlassian.com/manage-profile/security/api-tokens> and set `JIRA_API_TOKEN` in Ona secrets (same place you set `EFS_MOUNT_POINT`). `install.sh` will then run `acli jira auth login --token` on every instance. Optional overrides: `JIRA_EMAIL` (defaults to `git config user.email`) and `JIRA_SITE` (defaults to `vanta.atlassian.net`).
+
+If `JIRA_API_TOKEN` is unset, the step is skipped.
 
 ## Forking this repo
 
@@ -116,7 +126,7 @@ If you're adopting this as a starting point for your own dotfiles, change these 
 - **Claude Code settings** (`claude/.claude/settings.json`):
   - `model: opus` — Opus is expensive; consider `sonnet` or `haiku` if you're cost-conscious.
   - `skipDangerousModePermissionPrompt: true` — disables the confirmation prompt for dangerous-mode actions. Reasonable in ephemeral cloud devcontainers; a conscious trust tradeoff on a personal laptop.
-  - `enabledPlugins` — `pup` is Datadog-specific. Drop it (and the `datadog-pup` marketplace entry) if you don't work at Datadog/Vanta-adjacent infra.
+  - `enabledPlugins` — `pup` is Datadog-specific. Drop it (and the `datadog-pup` marketplace entry, and the `pup` binary install in `install.sh`) if you don't work at Datadog/Vanta-adjacent infra.
 - **`gh` protocol** (`gh/.config/gh/config.yml`): set to `ssh`. Switch to `https` if you don't use SSH keys with GitHub.
 - **Zsh theme** (`zsh/.zshrc`): `agnoster` requires a Powerline-patched font. Pick a different `ZSH_THEME` if yours doesn't have one.
 - **Ghostty + Zellij keybinds** are tuned around a specific tradeoff (keeping Option+Arrow for shell word-nav, putting pane-nav on Option+Shift+Arrow). If you don't share that constraint, simpler defaults may fit you better — see the bullets under [Notable config choices](#notable-config-choices).
