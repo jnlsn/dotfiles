@@ -60,6 +60,39 @@ else
     skip "Zellij already installed"
 fi
 
+# Pup (Datadog CLI) — required by the pup Claude plugin's agents/skills,
+# which all shell out to `pup <subcommand>`. Linux-only here; on macOS use
+# `brew tap datadog-labs/pack && brew install pup`.
+if [ "$OS" = "Linux" ] && ! command -v pup &>/dev/null; then
+    case "$(uname -m)" in
+        x86_64)  PUP_ARCH="x86_64" ;;
+        aarch64) PUP_ARCH="aarch64" ;;
+        *) PUP_ARCH="" ;;
+    esac
+    if [ -n "$PUP_ARCH" ]; then
+        info "Installing pup..."
+        mkdir -p "$HOME/.local/bin"
+        tmp="$(mktemp -d)"
+        # Release assets are versioned (pup_<ver>_Linux_<arch>.tar.gz), so we
+        # resolve the current URL from the GitHub API rather than hardcoding.
+        pup_url=$(curl -fsSL https://api.github.com/repos/datadog-labs/pup/releases/latest \
+            | grep -oE "https://[^\"]*Linux_${PUP_ARCH}\\.tar\\.gz" | head -1)
+        if [ -n "$pup_url" ]; then
+            curl -fsSL -o "$tmp/pup.tar.gz" "$pup_url"
+            tar xzf "$tmp/pup.tar.gz" -C "$tmp"
+            mv "$tmp/pup" "$HOME/.local/bin/pup"
+            ok "pup installed"
+        else
+            skip "pup: couldn't resolve latest Linux_${PUP_ARCH} release asset"
+        fi
+        rm -rf "$tmp"
+    else
+        skip "pup: unsupported arch $(uname -m)"
+    fi
+else
+    [ "$OS" = "Linux" ] && skip "pup already installed"
+fi
+
 # Oh My Zsh
 if [ ! -d "$HOME/.oh-my-zsh" ]; then
     info "Installing Oh My Zsh..."
@@ -162,11 +195,74 @@ if [ -n "$EFS_DIR" ]; then
     link_to_efs ".claude.json"              # Claude Code OAuth + API key
     link_to_efs ".claude/.credentials.json"  # Claude Code credentials
     link_to_efs ".config/gh/hosts.yml"       # GitHub CLI auth
-    link_to_efs ".config/acli"               # Atlassian CLI auth
+    link_to_efs ".config/acli"               # Atlassian CLI non-secret config (site, email)
     link_to_efs ".aws"                       # AWS config
     link_to_efs ".zsh_history"               # Shell history
 
     ok "EFS credential symlinks configured"
 else
     skip "EFS_MOUNT_POINT not set (set it in Ona secrets to enable)"
+fi
+
+# Atlassian CLI auth — auto-authenticate using an API token.
+#
+# ACLI stores the OAuth/API token in the OS keyring (libsecret/DBus), which is
+# per-machine and ephemeral — EFS can only persist the YAML config (site,
+# email), not the token itself. So every fresh Ona instance boots logged out.
+#
+# Fix: set JIRA_API_TOKEN in Ona secrets (same pattern as EFS_MOUNT_POINT).
+# Create a token at https://id.atlassian.com/manage-profile/security/api-tokens.
+# API tokens are long-lived, so one token re-auths every new instance non-
+# interactively.
+JIRA_SITE="${JIRA_SITE:-vanta.atlassian.net}"
+if [ -n "${JIRA_API_TOKEN:-}" ]; then
+    # Install ACLI if missing (Ona base images typically ship it in /usr/local/bin,
+    # but handle the cold case so this works on any Linux/macOS box).
+    if ! command -v acli &>/dev/null; then
+        case "$(uname -s)-$(uname -m)" in
+            Linux-x86_64)  ACLI_URL="https://acli.atlassian.com/linux/latest/acli_linux_amd64/acli" ;;
+            Darwin-arm64)  ACLI_URL="https://acli.atlassian.com/darwin/latest/acli_darwin_arm64/acli" ;;
+            Darwin-x86_64) ACLI_URL="https://acli.atlassian.com/darwin/latest/acli_darwin_amd64/acli" ;;
+            *) ACLI_URL="" ;;
+        esac
+        if [ -n "$ACLI_URL" ]; then
+            info "Installing ACLI to ~/.local/bin..."
+            mkdir -p "$HOME/.local/bin"
+            curl -fsSL -o "$HOME/.local/bin/acli" "$ACLI_URL"
+            chmod +x "$HOME/.local/bin/acli"
+            export PATH="$HOME/.local/bin:$PATH"
+            ok "ACLI installed"
+        else
+            skip "ACLI install: unsupported platform $(uname -s)-$(uname -m)"
+        fi
+    fi
+
+    if command -v acli &>/dev/null; then
+        if acli jira auth status &>/dev/null; then
+            skip "ACLI already authenticated"
+        else
+            JIRA_EMAIL="${JIRA_EMAIL:-$(git config --global --get user.email 2>/dev/null || true)}"
+            if [ -z "$JIRA_EMAIL" ]; then
+                skip "ACLI auth: no email (set JIRA_EMAIL, or git config --global user.email)"
+            else
+                info "Authenticating ACLI as $JIRA_EMAIL @ $JIRA_SITE..."
+                # File redirect, not a pipe — acli reads the token via TTY
+                # handling that breaks with stdin pipes.
+                token_file="$(mktemp)"
+                chmod 600 "$token_file"
+                printf '%s' "$JIRA_API_TOKEN" > "$token_file"
+                if acli jira auth login \
+                        --site "$JIRA_SITE" \
+                        --email "$JIRA_EMAIL" \
+                        --token < "$token_file" &>/dev/null; then
+                    ok "ACLI authenticated"
+                else
+                    info "ACLI auth failed — check JIRA_API_TOKEN is valid and email matches"
+                fi
+                rm -f "$token_file"
+            fi
+        fi
+    fi
+else
+    skip "JIRA_API_TOKEN not set (set it in Ona secrets for auto-ACLI-auth)"
 fi
