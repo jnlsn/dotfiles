@@ -1,11 +1,11 @@
 # dotfiles
 
-Personal dotfiles for macOS and Linux, managed with [GNU Stow](https://www.gnu.org/software/stow/). The install script bootstraps a fresh machine (or [Ona](https://ona.com/)/Gitpod cloud devcontainer) into a working environment with one command.
+Personal dotfiles for Linux devcontainers, managed with [GNU Stow](https://www.gnu.org/software/stow/). The install script bootstraps a fresh instance (or [Ona](https://ona.com/)/Gitpod cloud devcontainer) into a working environment with one command.
 
 ## Quick start
 
 ```bash
-git clone git@github.com:dustin-riley/dotfiles.git ~/dotfiles
+git clone git@github.com:jnlsn/dotfiles.git ~/dotfiles
 ~/dotfiles/install.sh
 ```
 
@@ -13,7 +13,7 @@ The script is idempotent — safe to re-run after pulling updates.
 
 ## How Stow works (if you haven't seen it)
 
-Each top-level directory in this repo is a **package** laid out as a mirror of `$HOME`. For example, `zsh/.zshrc` → `~/.zshrc`, and `vscode/Library/Application Support/Code/User/settings.json` → `~/Library/Application Support/Code/User/settings.json`.
+Each top-level directory in this repo is a **package** laid out as a mirror of `$HOME`. For example, `zsh/.zshrc` → `~/.zshrc`, and `gh/.config/gh/config.yml` → `~/.config/gh/config.yml`.
 
 `stow` creates symlinks from `$HOME` back into this repo. Edits you make to your live config are edits to the repo — commit them and they're tracked.
 
@@ -21,55 +21,39 @@ If a real file already exists where a symlink needs to go (common on devcontaine
 
 ## Packages
 
-| Package    | Manages                                            | Target                                                        | Platform |
-| ---------- | -------------------------------------------------- | ------------------------------------------------------------- | -------- |
-| `claude`   | Claude Code settings (model, status line, plugins) | `~/.claude/settings.json`                                     | all      |
-| `gh`       | GitHub CLI config (aliases, protocol, editor)      | `~/.config/gh/config.yml`                                     | all      |
-| `git`      | Git identity + global gitignore                    | `~/.config/git/config`, `~/.config/git/ignore`                | all      |
-| `ghostty`  | Terminal config (theme, padding, cursor, keys)     | `~/Library/Application Support/com.mitchellh.ghostty/config`  | macOS    |
-| `vscode`   | Editor settings (formatting, TS, exclusions)       | `~/Library/Application Support/Code/User/settings.json`       | macOS    |
-| `zellij`   | Terminal multiplexer config (keybinds, kitty kbd)  | `~/.config/zellij/config.kdl`                                 | all      |
-| `zsh`      | Shell config (Oh My Zsh, plugins, PATH, NVM)       | `~/.zshrc`, `~/.zprofile`                                     | all      |
-
-Linux installs omit `ghostty` and `vscode` (macOS-only targets).
+| Package    | Manages                                            | Target                                              |
+| ---------- | -------------------------------------------------- | --------------------------------------------------- |
+| `claude`   | Claude Code settings (model, status line, plugins) | `~/.claude/settings.json`                           |
+| `gh`       | GitHub CLI config (aliases, protocol, editor)      | `~/.config/gh/config.yml`                           |
+| `git`      | Git identity + global gitignore                    | `~/.config/git/config`, `~/.config/git/ignore`      |
+| `zellij`   | Terminal multiplexer config (keybinds, kitty kbd)  | `~/.config/zellij/config.kdl`                       |
+| `zsh`      | Shell config (Oh My Zsh, plugins, PATH, NVM)       | `~/.zshrc`                                          |
 
 ### Notable config choices
 
-- **Git identity is committed.** `git/.config/git/config` hard-codes `Dustin Riley` and a GitHub `noreply` email as the global identity. If you fork this, change it before running `install.sh` or your commits will be attributed to me.
+- **Git identity is committed.** `git/.config/git/config` hard-codes the global identity. If you fork this, change it before running `install.sh` or your commits will be attributed to the wrong person.
 - **`gh` uses SSH**, not HTTPS. You'll need an SSH key registered with GitHub before `gh` clones/pushes work.
-- **Claude Code runs Opus by default** with `alwaysThinkingEnabled: true` and `skipDangerousModePermissionPrompt: true`. The latter disables the dangerous-mode confirmation prompt, which is fine in ephemeral cloud devcontainers but is a conscious trust tradeoff on a personal laptop. Review `claude/.claude/settings.json` and decide for yourself.
-- **Enabled Claude plugins:** `frontend-design`, `code-review`, and `pup` (from the `datadog-labs/pup` marketplace). The plugins themselves are fetched by Claude Code; the `pup` binary they shell out to is installed by `install.sh` on Linux (see below).
-- **VS Code** enables format-on-save with Prettier, auto-runs ESLint fixes and import organization on save, and turns on the experimental TypeScript Go server (`typescript.experimental.useTsgo`).
-- **Ghostty** uses the `Birds of Paradise` theme and binds `shift+enter` to send a literal escape+CR (useful for multi-line input in REPLs/TUIs that treat bare Enter as submit). `macos-option-as-alt = left` remaps Left Option to Alt, leaving Right Option free for macOS special characters (∆, ˚, ¬). Option+Arrow is left on its default readline word-nav (`ESC b` / `ESC f`) so word-by-word cursor movement still works in shells/REPLs.
+- **Claude Code runs Opus by default** with `alwaysThinkingEnabled: true` and `skipDangerousModePermissionPrompt: true`. The latter disables the dangerous-mode confirmation prompt, which is fine in ephemeral cloud devcontainers but is a conscious trust tradeoff. Review `claude/.claude/settings.json` and decide for yourself.
+- **Enabled Claude plugins:** `frontend-design`, `code-review`, and `pup` (from the `datadog-labs/pup` marketplace). The plugins themselves are fetched by Claude Code; the `pup` binary they shell out to is installed by `install.sh`.
 - **Zellij** enables the Kitty keyboard protocol (`support_kitty_keyboard_protocol true`) so modifier-key combos like Option+Shift+Arrow encode distinctly. Pane navigation is bound to **Option+Shift+Arrow** (and `Alt+h/j/k/l`), not plain Option+Arrow — the latter is reserved for shell word-nav. `ToggleFloatingPanes` is `Alt+Shift+f` for the same reason (plain `Alt+f` collides with word-forward `ESC f`).
 
 ## What `install.sh` actually does
 
-Read the script — it's ~270 lines and stays small deliberately. But since it modifies a fresh system, here's what to expect before you run it:
+Read the script — it's ~200 lines and stays small deliberately. But since it modifies a fresh system, here's what to expect before you run it:
 
-### Always installs
-
-1. **GNU Stow** (via Homebrew on macOS, apt on Linux).
-2. **Zellij** (terminal multiplexer). On macOS, via Homebrew. On Linux, the script downloads the latest release tarball from GitHub into `~/.local/bin/zellij` — it does **not** use apt, so there's no system-wide install and no `sudo` needed for this step.
-3. **Oh My Zsh** (via the official installer, unattended mode).
-4. **zsh-autosuggestions** and **zsh-syntax-highlighting** (cloned into `~/.oh-my-zsh/custom/plugins/`).
-
-### macOS only
-
-- **Homebrew**, if missing. Installed non-interactively — will prompt for your password via `sudo` during Homebrew's own installer.
-
-### Linux only
-
-- **Changes your default shell to zsh** using `sudo chsh`. Skipped if zsh is already default. This is why `install.sh` may prompt for `sudo`.
-- **Installs `pup`** (Datadog CLI) to `~/.local/bin/pup` from the latest GitHub release, if missing. The `pup` Claude plugin's agents all shell out to the binary, so skipping this makes them non-functional. On macOS, install via `brew tap datadog-labs/pack && brew install pup` instead.
-- **Auto-authenticates ACLI** if `JIRA_API_TOKEN` is set in the environment — see [ACLI auth](#acli-auth).
+1. **GNU Stow** (via apt).
+2. **Zellij** (terminal multiplexer). Downloads the latest release tarball from GitHub into `~/.local/bin/zellij` — no system-wide install and no `sudo` needed for this step.
+3. **Pup** (Datadog CLI) to `~/.local/bin/pup` from the latest GitHub release, if missing. The `pup` Claude plugin's agents all shell out to the binary, so skipping this makes them non-functional.
+4. **Oh My Zsh** (via the official installer, unattended mode).
+5. **zsh-autosuggestions** and **zsh-syntax-highlighting** (cloned into `~/.oh-my-zsh/custom/plugins/`).
+6. **Changes your default shell to zsh** using `sudo chsh`. Skipped if zsh is already default. This is why `install.sh` may prompt for `sudo`.
+7. **Auto-authenticates ACLI** if `JIRA_API_TOKEN` is set in the environment — see [ACLI auth](#acli-auth).
 
 ### Opinionated decisions worth flagging
 
 - **Zellij is installed unconditionally**, including on Ona instances. It's not wired into `.zshrc` as auto-start, so nothing changes unless you invoke `zellij`, but the binary will be on disk. If you don't want it, delete the Zellij block in `install.sh` before running.
 - **Conflicting dotfiles are renamed to `.bak`**, not deleted. If `~/.zshrc` exists as a regular file, it becomes `~/.zshrc.bak` and the stow symlink takes over. Re-running the installer won't overwrite an existing `.bak` — so if you re-bootstrap twice, the oldest backup is what sticks around.
-- **`PATH` precedence** (from `zsh/.zshrc`): `~/.local/bin` → `~/bin` → `/opt/homebrew/opt/libpq/bin` → system. Anything you drop into `~/.local/bin` (including the Linux-installed Zellij) wins over Homebrew and system binaries.
-- **Ghostty terminfo fallback:** `.zshrc` falls back to `TERM=xterm-256color` (before `oh-my-zsh` loads) on hosts that don't have an `xterm-ghostty` terminfo entry. Without the fallback, `zsh-autosuggestions`/`zsh-syntax-highlighting` drive ZLE against an unknown terminal and every keystroke renders twice. Common on Ubuntu ≤ ncurses 6.4 (Ona, Gitpod, many Debian derivatives). No-op on hosts that *do* have the entry (recent macOS/Homebrew ncurses), so the full Ghostty capability set is preserved there.
+- **`PATH` precedence** (from `zsh/.zshrc`): `~/.local/bin` → `~/bin` → system. Anything you drop into `~/.local/bin` (including the installed Zellij) wins over system binaries.
 
 ## Ona / Gitpod
 
@@ -118,18 +102,17 @@ If you're adopting this as a starting point for your own dotfiles, change these 
 
 ### Must change
 
-- **Git identity** in `git/.config/git/config`. Replace `name` and `email` with yours. If you skip this, every commit you make after stowing will be attributed to me. Use your provider's `noreply` email (e.g. `<id>+<username>@users.noreply.github.com`) if you don't want your real address in git history.
+- **Git identity** in `git/.config/git/config`. Replace `name` and `email` with yours. If you skip this, every commit you make after stowing will be attributed to the wrong person. Use your provider's `noreply` email (e.g. `<id>+<username>@users.noreply.github.com`) if you don't want your real address in git history.
 - **Clone URL** in the [Quick start](#quick-start) above — point it at your fork.
 
 ### Worth reviewing before you run
 
 - **Claude Code settings** (`claude/.claude/settings.json`):
   - `model: opus` — Opus is expensive; consider `sonnet` or `haiku` if you're cost-conscious.
-  - `skipDangerousModePermissionPrompt: true` — disables the confirmation prompt for dangerous-mode actions. Reasonable in ephemeral cloud devcontainers; a conscious trust tradeoff on a personal laptop.
+  - `skipDangerousModePermissionPrompt: true` — disables the confirmation prompt for dangerous-mode actions. Reasonable in ephemeral cloud devcontainers; a conscious trust tradeoff on a personal machine.
   - `enabledPlugins` — `pup` is Datadog-specific. Drop it (and the `datadog-pup` marketplace entry, and the `pup` binary install in `install.sh`) if you don't work at Datadog/Vanta-adjacent infra.
 - **`gh` protocol** (`gh/.config/gh/config.yml`): set to `ssh`. Switch to `https` if you don't use SSH keys with GitHub.
-- **Zsh theme** (`zsh/.zshrc`): `agnoster` requires a Powerline-patched font. Pick a different `ZSH_THEME` if yours doesn't have one.
-- **Ghostty + Zellij keybinds** are tuned around a specific tradeoff (keeping Option+Arrow for shell word-nav, putting pane-nav on Option+Shift+Arrow). If you don't share that constraint, simpler defaults may fit you better — see the bullets under [Notable config choices](#notable-config-choices).
+- **Zsh theme** (`zsh/.zshrc`): `agnoster` requires a Powerline-patched font in your terminal. Pick a different `ZSH_THEME` if yours doesn't have one.
 
 ### EFS / Ona persistence
 
@@ -139,19 +122,17 @@ Entirely optional. If you don't use Ona or don't have a persistent mount, leave 
 
 - **Edit a config:** edit the file in this repo (or edit the symlinked target — same thing) and commit.
 - **Add a new package:** create a top-level directory mirroring `$HOME`, add it to the `PACKAGES` list in `install.sh`, and re-run `install.sh`.
-- **Unstow everything:** `cd ~/dotfiles && stow -D -t ~ claude gh git zellij zsh` (add `ghostty vscode` on macOS). Symlinks go away; your `.bak` files remain where you left them.
+- **Unstow everything:** `cd ~/dotfiles && stow -D -t ~ claude gh git zellij zsh`. Symlinks go away; your `.bak` files remain where you left them.
 - **Check what's linked:** `ls -la ~ | grep dotfiles` shows which files in `$HOME` point back here.
 
 ## Repo layout
 
 ```
 .
-├── install.sh              # bootstrap (macOS + Linux, idempotent)
+├── install.sh              # bootstrap (Linux, idempotent)
 ├── claude/                 # Claude Code settings
 ├── gh/                     # GitHub CLI
 ├── git/                    # git identity + global ignore
-├── ghostty/                # Ghostty terminal (macOS)
-├── vscode/                 # VS Code (macOS)
 ├── zellij/                 # Zellij (terminal multiplexer)
 └── zsh/                    # zsh + Oh My Zsh
 ```

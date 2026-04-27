@@ -2,68 +2,43 @@
 set -euo pipefail
 
 DOTFILES="$(cd "$(dirname "$0")" && pwd)"
-OS="$(uname -s)"
 
 info() { printf '\033[34m[info]\033[0m %s\n' "$1"; }
 skip() { printf '\033[33m[skip]\033[0m %s\n' "$1"; }
 ok()   { printf '\033[32m[ ok ]\033[0m %s\n' "$1"; }
 
-# Package manager setup & GNU Stow
-if [ "$OS" = "Darwin" ]; then
-    if ! command -v brew &>/dev/null; then
-        info "Installing Homebrew..."
-        NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-        eval "$(/opt/homebrew/bin/brew shellenv)"
-        ok "Homebrew installed"
-    else
-        skip "Homebrew already installed"
-    fi
-
-    if ! command -v stow &>/dev/null; then
-        info "Installing GNU Stow..."
-        brew install stow
-        ok "Stow installed"
-    else
-        skip "Stow already installed"
-    fi
+# GNU Stow
+if ! command -v stow &>/dev/null; then
+    info "Installing GNU Stow..."
+    sudo apt-get update -qq && sudo apt-get install -y -qq stow
+    ok "Stow installed"
 else
-    if ! command -v stow &>/dev/null; then
-        info "Installing GNU Stow..."
-        sudo apt-get update -qq && sudo apt-get install -y -qq stow
-        ok "Stow installed"
-    else
-        skip "Stow already installed"
-    fi
+    skip "Stow already installed"
 fi
 
 # Zellij
 if ! command -v zellij &>/dev/null; then
     info "Installing Zellij..."
-    if [ "$OS" = "Darwin" ]; then
-        brew install zellij
-    else
-        case "$(uname -m)" in
-            x86_64)  ZELLIJ_ARCH="x86_64-unknown-linux-musl" ;;
-            aarch64) ZELLIJ_ARCH="aarch64-unknown-linux-musl" ;;
-            *) echo "Unsupported arch: $(uname -m)" >&2; exit 1 ;;
-        esac
-        mkdir -p "$HOME/.local/bin"
-        tmp="$(mktemp -d)"
-        curl -fsSL -o "$tmp/zellij.tar.gz" \
-            "https://github.com/zellij-org/zellij/releases/latest/download/zellij-${ZELLIJ_ARCH}.tar.gz"
-        tar xzf "$tmp/zellij.tar.gz" -C "$tmp"
-        mv "$tmp/zellij" "$HOME/.local/bin/zellij"
-        rm -rf "$tmp"
-    fi
+    case "$(uname -m)" in
+        x86_64)  ZELLIJ_ARCH="x86_64-unknown-linux-musl" ;;
+        aarch64) ZELLIJ_ARCH="aarch64-unknown-linux-musl" ;;
+        *) echo "Unsupported arch: $(uname -m)" >&2; exit 1 ;;
+    esac
+    mkdir -p "$HOME/.local/bin"
+    tmp="$(mktemp -d)"
+    curl -fsSL -o "$tmp/zellij.tar.gz" \
+        "https://github.com/zellij-org/zellij/releases/latest/download/zellij-${ZELLIJ_ARCH}.tar.gz"
+    tar xzf "$tmp/zellij.tar.gz" -C "$tmp"
+    mv "$tmp/zellij" "$HOME/.local/bin/zellij"
+    rm -rf "$tmp"
     ok "Zellij installed"
 else
     skip "Zellij already installed"
 fi
 
 # Pup (Datadog CLI) — required by the pup Claude plugin's agents/skills,
-# which all shell out to `pup <subcommand>`. Linux-only here; on macOS use
-# `brew tap datadog-labs/pack && brew install pup`.
-if [ "$OS" = "Linux" ] && ! command -v pup &>/dev/null; then
+# which all shell out to `pup <subcommand>`.
+if ! command -v pup &>/dev/null; then
     case "$(uname -m)" in
         x86_64)  PUP_ARCH="x86_64" ;;
         aarch64) PUP_ARCH="aarch64" ;;
@@ -90,7 +65,7 @@ if [ "$OS" = "Linux" ] && ! command -v pup &>/dev/null; then
         skip "pup: unsupported arch $(uname -m)"
     fi
 else
-    [ "$OS" = "Linux" ] && skip "pup already installed"
+    skip "pup already installed"
 fi
 
 # Oh My Zsh
@@ -120,11 +95,7 @@ else
     skip "zsh-syntax-highlighting already installed"
 fi
 
-# Stow packages — only stow macOS-specific packages on Darwin
 PACKAGES="claude gh git zsh zellij"
-if [ "$OS" = "Darwin" ]; then
-    PACKAGES="$PACKAGES ghostty vscode"
-fi
 
 # Back up existing files that would conflict with stow symlinks
 # (e.g. .zshrc from the devcontainer base image, or ~/.config/zellij/config.kdl
@@ -151,15 +122,13 @@ cd "$DOTFILES"
 stow -t ~ $PACKAGES
 ok "All packages stowed"
 
-# Set zsh as default shell (Linux only — macOS ships with zsh as default).
-if [ "$OS" = "Linux" ]; then
-    if [ "$(getent passwd "$(id -un)" | cut -d: -f7)" != "/usr/bin/zsh" ]; then
-        info "Setting default shell to zsh..."
-        sudo chsh "$(id -un)" --shell "/usr/bin/zsh"
-        ok "Default shell set to zsh"
-    else
-        skip "Default shell already zsh"
-    fi
+# Set zsh as default shell
+if [ "$(getent passwd "$(id -un)" | cut -d: -f7)" != "/usr/bin/zsh" ]; then
+    info "Setting default shell to zsh..."
+    sudo chsh "$(id -un)" --shell "/usr/bin/zsh"
+    ok "Default shell set to zsh"
+else
+    skip "Default shell already zsh"
 fi
 
 # EFS network directory — persist credentials across Ona instances.
@@ -222,13 +191,11 @@ fi
 # interactively.
 JIRA_SITE="${JIRA_SITE:-vanta.atlassian.net}"
 if [ -n "${JIRA_API_TOKEN:-}" ]; then
-    # Install ACLI if missing (Ona base images typically ship it in /usr/local/bin,
-    # but handle the cold case so this works on any Linux/macOS box).
+    # Install ACLI if missing
     if ! command -v acli &>/dev/null; then
-        case "$(uname -s)-$(uname -m)" in
-            Linux-x86_64)  ACLI_URL="https://acli.atlassian.com/linux/latest/acli_linux_amd64/acli" ;;
-            Darwin-arm64)  ACLI_URL="https://acli.atlassian.com/darwin/latest/acli_darwin_arm64/acli" ;;
-            Darwin-x86_64) ACLI_URL="https://acli.atlassian.com/darwin/latest/acli_darwin_amd64/acli" ;;
+        case "$(uname -m)" in
+            x86_64)  ACLI_URL="https://acli.atlassian.com/linux/latest/acli_linux_amd64/acli" ;;
+            aarch64) ACLI_URL="https://acli.atlassian.com/linux/latest/acli_linux_arm64/acli" ;;
             *) ACLI_URL="" ;;
         esac
         if [ -n "$ACLI_URL" ]; then
@@ -239,7 +206,7 @@ if [ -n "${JIRA_API_TOKEN:-}" ]; then
             export PATH="$HOME/.local/bin:$PATH"
             ok "ACLI installed"
         else
-            skip "ACLI install: unsupported platform $(uname -s)-$(uname -m)"
+            skip "ACLI install: unsupported arch $(uname -m)"
         fi
     fi
 
