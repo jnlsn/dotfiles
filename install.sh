@@ -68,6 +68,30 @@ else
     skip "pup already installed"
 fi
 
+# Graphite CLI
+if ! command -v gt &>/dev/null; then
+    info "Installing Graphite CLI..."
+    # NVM installs node outside of PATH for non-interactive shells; source it first.
+    if [ -s "$HOME/.nvm/nvm.sh" ]; then
+        # shellcheck source=/dev/null
+        . "$HOME/.nvm/nvm.sh"
+    fi
+    if command -v npm &>/dev/null; then
+        npm install -g @withgraphite/graphite-cli
+        ok "Graphite CLI installed"
+    else
+        skip "Graphite CLI: npm not available (install Node.js or NVM first)"
+    fi
+else
+    skip "Graphite CLI already installed"
+fi
+
+# Graphite repo init
+if command -v gt &>/dev/null && git rev-parse --git-dir &>/dev/null 2>&1; then
+    info "Initializing Graphite (trunk: main)..."
+    gt repo init --trunk main && ok "Graphite initialized" || skip "Graphite already initialized"
+fi
+
 # Oh My Zsh
 if [ ! -d "$HOME/.oh-my-zsh" ]; then
     info "Installing Oh My Zsh..."
