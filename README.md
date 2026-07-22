@@ -26,6 +26,7 @@ If a real file already exists where a symlink needs to go (common on devcontaine
 | `claude`   | Claude Code settings (model, status line, plugins) | `~/.claude/settings.json`                           |
 | `gh`       | GitHub CLI config (aliases, protocol, editor)      | `~/.config/gh/config.yml`                           |
 | `git`      | Git identity + global gitignore                    | `~/.config/git/config`, `~/.config/git/ignore`      |
+| `nvim`     | Neovim config (lazy.nvim, LSP, treesitter)         | `~/.config/nvim/`                                   |
 | `zellij`   | Terminal multiplexer config (keybinds, kitty kbd)  | `~/.config/zellij/config.kdl`                       |
 | `zsh`      | Shell config (Oh My Zsh, plugins, PATH, NVM)       | `~/.zshrc`                                          |
 
@@ -35,6 +36,7 @@ If a real file already exists where a symlink needs to go (common on devcontaine
 - **`gh` uses SSH**, not HTTPS. You'll need an SSH key registered with GitHub before `gh` clones/pushes work.
 - **Claude Code runs Opus by default** with `alwaysThinkingEnabled: true` and `skipDangerousModePermissionPrompt: true`. The latter disables the dangerous-mode confirmation prompt, which is fine in ephemeral cloud devcontainers but is a conscious trust tradeoff. Review `claude/.claude/settings.json` and decide for yourself.
 - **Enabled Claude plugins:** `frontend-design`, `code-review`, and `pup` (from the `datadog-labs/pup` marketplace). The plugins themselves are fetched by Claude Code; the `pup` binary they shell out to is installed by `install.sh`.
+- **Neovim** is configured with [lazy.nvim](https://github.com/folke/lazy.nvim) as the plugin manager. `init.lua` sets the leader (space) then loads three modules from `lua/config/` (`options`, `keymaps`, `lazy`); every file under `lua/plugins/` returns a plugin spec that lazy auto-imports. Batteries included: treesitter, LSP (via `mason` — `lua_ls`, `pyright`, `ts_ls`, `gopls`, `rust_analyzer`, and more auto-installed on first launch), `nvim-cmp` completion, telescope (`<leader>ff` files, `<leader>fg` grep), neo-tree (`<leader>fe`), gitsigns, and the tokyonight colorscheme. `EDITOR` and the `gh` editor both point at `nvim`, and `.zshrc` aliases `vim`/`vi` → `nvim`. First launch clones lazy.nvim and installs plugins, so it needs network and takes a minute; subsequent launches are instant. lazy writes a `lazy-lock.json` into the config dir — commit it if you want reproducible plugin versions across instances.
 - **Zellij** enables the Kitty keyboard protocol (`support_kitty_keyboard_protocol true`) so modifier-key combos like Option+Shift+Arrow encode distinctly. Pane navigation is bound to **Option+Shift+Arrow** (and `Alt+h/j/k/l`), not plain Option+Arrow — the latter is reserved for shell word-nav. `ToggleFloatingPanes` is `Alt+Shift+f` for the same reason (plain `Alt+f` collides with word-forward `ESC f`).
 
 ## What `install.sh` actually does
@@ -43,11 +45,12 @@ Read the script — it's ~200 lines and stays small deliberately. But since it m
 
 1. **GNU Stow** (via apt).
 2. **Zellij** (terminal multiplexer). Downloads the latest release tarball from GitHub into `~/.local/bin/zellij` — no system-wide install and no `sudo` needed for this step.
-3. **Pup** (Datadog CLI) to `~/.local/bin/pup` from the latest GitHub release, if missing. The `pup` Claude plugin's agents all shell out to the binary, so skipping this makes them non-functional.
-4. **Oh My Zsh** (via the official installer, unattended mode).
-5. **zsh-autosuggestions** and **zsh-syntax-highlighting** (cloned into `~/.oh-my-zsh/custom/plugins/`).
-6. **Changes your default shell to zsh** using `sudo chsh`. Skipped if zsh is already default. This is why `install.sh` may prompt for `sudo`.
-7. **Auto-authenticates ACLI** if `JIRA_API_TOKEN` is set in the environment — see [ACLI auth](#acli-auth).
+3. **Neovim** — downloads the latest stable release tarball from GitHub into `~/.local/nvim/` and symlinks the binary to `~/.local/bin/nvim` (no `sudo`, no system-wide install). The apt package is usually too old for the Lua/LSP APIs this config uses, hence the release download.
+4. **Pup** (Datadog CLI) to `~/.local/bin/pup` from the latest GitHub release, if missing. The `pup` Claude plugin's agents all shell out to the binary, so skipping this makes them non-functional.
+5. **Oh My Zsh** (via the official installer, unattended mode).
+6. **zsh-autosuggestions** and **zsh-syntax-highlighting** (cloned into `~/.oh-my-zsh/custom/plugins/`).
+7. **Changes your default shell to zsh** using `sudo chsh`. Skipped if zsh is already default. This is why `install.sh` may prompt for `sudo`.
+8. **Auto-authenticates ACLI** if `JIRA_API_TOKEN` is set in the environment — see [ACLI auth](#acli-auth).
 
 ### Opinionated decisions worth flagging
 
@@ -122,7 +125,7 @@ Entirely optional. If you don't use Ona or don't have a persistent mount, leave 
 
 - **Edit a config:** edit the file in this repo (or edit the symlinked target — same thing) and commit.
 - **Add a new package:** create a top-level directory mirroring `$HOME`, add it to the `PACKAGES` list in `install.sh`, and re-run `install.sh`.
-- **Unstow everything:** `cd ~/dotfiles && stow -D -t ~ claude gh git zellij zsh`. Symlinks go away; your `.bak` files remain where you left them.
+- **Unstow everything:** `cd ~/dotfiles && stow -D -t ~ claude gh git nvim zellij zsh`. Symlinks go away; your `.bak` files remain where you left them.
 - **Check what's linked:** `ls -la ~ | grep dotfiles` shows which files in `$HOME` point back here.
 
 ## Repo layout
@@ -133,6 +136,7 @@ Entirely optional. If you don't use Ona or don't have a persistent mount, leave 
 ├── claude/                 # Claude Code settings
 ├── gh/                     # GitHub CLI
 ├── git/                    # git identity + global ignore
+├── nvim/                   # Neovim (lazy.nvim, LSP, treesitter)
 ├── zellij/                 # Zellij (terminal multiplexer)
 └── zsh/                    # zsh + Oh My Zsh
 ```

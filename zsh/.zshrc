@@ -10,7 +10,9 @@ plugins=(git z npm sudo zsh-autosuggestions zsh-syntax-highlighting)
 
 source $ZSH/oh-my-zsh.sh
 
-export EDITOR='vim'
+export EDITOR='nvim'
+alias vim='nvim'
+alias vi='nvim'
 
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"

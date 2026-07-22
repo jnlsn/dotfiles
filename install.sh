@@ -36,6 +36,42 @@ else
     skip "Zellij already installed"
 fi
 
+# Neovim — install the latest stable release rather than the (often ancient)
+# apt package, since the config depends on Lua/LSP APIs from recent versions.
+if ! command -v nvim &>/dev/null; then
+    case "$(uname -m)" in
+        x86_64)  NVIM_ARCH="x86_64" ;;
+        aarch64) NVIM_ARCH="arm64" ;;
+        *) NVIM_ARCH="" ;;
+    esac
+    if [ -n "$NVIM_ARCH" ]; then
+        info "Installing Neovim..."
+        mkdir -p "$HOME/.local/bin"
+        tmp="$(mktemp -d)"
+        # Release asset names have changed across versions (nvim-linux64 →
+        # nvim-linux-<arch>), so resolve the current URL from the GitHub API.
+        nvim_url=$(curl -fsSL https://api.github.com/repos/neovim/neovim/releases/latest \
+            | grep -oE "https://[^\"]*nvim-linux-${NVIM_ARCH}\\.tar\\.gz" | head -1)
+        if [ -n "$nvim_url" ]; then
+            curl -fsSL -o "$tmp/nvim.tar.gz" "$nvim_url"
+            # Extract into a self-contained dir and symlink just the binary onto
+            # PATH; nvim finds its bundled lib/share relative to the real path.
+            rm -rf "$HOME/.local/nvim"
+            mkdir -p "$HOME/.local/nvim"
+            tar xzf "$tmp/nvim.tar.gz" -C "$HOME/.local/nvim" --strip-components=1
+            ln -sf "$HOME/.local/nvim/bin/nvim" "$HOME/.local/bin/nvim"
+            ok "Neovim installed"
+        else
+            skip "Neovim: couldn't resolve latest nvim-linux-${NVIM_ARCH} release asset"
+        fi
+        rm -rf "$tmp"
+    else
+        skip "Neovim: unsupported arch $(uname -m)"
+    fi
+else
+    skip "Neovim already installed"
+fi
+
 # Pup (Datadog CLI) — required by the pup Claude plugin's agents/skills,
 # which all shell out to `pup <subcommand>`.
 if ! command -v pup &>/dev/null; then
@@ -119,7 +155,7 @@ else
     skip "zsh-syntax-highlighting already installed"
 fi
 
-PACKAGES="claude gh git zsh zellij"
+PACKAGES="claude gh git zsh zellij nvim"
 
 # Back up existing files that would conflict with stow symlinks
 # (e.g. .zshrc from the devcontainer base image, or ~/.config/zellij/config.kdl
