@@ -104,28 +104,49 @@ else
     skip "pup already installed"
 fi
 
-# Graphite CLI
-if ! command -v gt &>/dev/null; then
-    info "Installing Graphite CLI..."
-    # NVM installs node outside of PATH for non-interactive shells; source it first.
-    if [ -s "$HOME/.nvm/nvm.sh" ]; then
-        # shellcheck source=/dev/null
-        . "$HOME/.nvm/nvm.sh"
-    fi
-    if command -v npm &>/dev/null; then
-        npm install -g @withgraphite/graphite-cli
-        ok "Graphite CLI installed"
-    else
-        skip "Graphite CLI: npm not available (install Node.js or NVM first)"
-    fi
+# gh stack (GitHub Stacked PRs) — gh extension for managing stacked branches/PRs.
+# Extensions live in ~/.local/share/gh/extensions, so this is per-machine state
+# rather than something stow can symlink from this repo.
+if ! command -v gh &>/dev/null; then
+    skip "gh stack: gh CLI not available (install GitHub CLI first)"
+elif gh extension list 2>/dev/null | grep -q "gh-stack"; then
+    skip "gh stack already installed"
 else
-    skip "Graphite CLI already installed"
+    info "Installing gh stack..."
+    # Needs an authed gh to resolve the release; don't fail the whole install if
+    # this box hasn't run `gh auth login` yet.
+    if gh extension install github/gh-stack; then
+        ok "gh stack installed"
+    else
+        skip "gh stack: install failed (is gh authenticated? \`gh auth login\`)"
+    fi
 fi
 
-# Graphite repo init
-if command -v gt &>/dev/null && git rev-parse --git-dir &>/dev/null 2>&1; then
-    info "Initializing Graphite (trunk: main)..."
-    gt repo init --trunk main && ok "Graphite initialized" || skip "Graphite already initialized"
+# gh-stack agent skill — teaches Claude Code how to drive `gh stack`.
+# Installed at user scope so it applies in every repo, not just this one.
+#
+# Must run BEFORE the stow step below: `gh skill install` creates
+# ~/.claude/skills/, which makes ~/.claude a real directory and so stops stow
+# from folding the whole of ~/.claude into a symlink at the repo. If it ran
+# after stow on a box with no pre-existing ~/.claude, the skill files would
+# land inside this repo's working tree instead of $HOME.
+if ! command -v gh &>/dev/null; then
+    skip "gh-stack skill: gh CLI not available"
+elif ! gh skill --help &>/dev/null; then
+    # `gh skill` is a preview command; older gh releases don't have it.
+    skip "gh-stack skill: this gh has no \`skill\` command (upgrade gh)"
+elif gh skill list --agent claude-code --scope user --json skillName 2>/dev/null | grep -q '"gh-stack"'; then
+    skip "gh-stack skill already installed"
+else
+    info "Installing gh-stack skill for Claude Code..."
+    mkdir -p "$HOME/.claude"
+    # --force so a re-run overwrites rather than blocking on an interactive
+    # confirm; version resolves to the latest tagged gh-stack release.
+    if gh skill install github/gh-stack gh-stack --agent claude-code --scope user --force; then
+        ok "gh-stack skill installed"
+    else
+        skip "gh-stack skill: install failed (is gh authenticated? \`gh auth login\`)"
+    fi
 fi
 
 # Oh My Zsh

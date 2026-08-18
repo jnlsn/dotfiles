@@ -2,3 +2,8 @@
 # exists at gh/.config/gh/hosts.yml, but it contains the OAuth token and
 # must never be committed.
 gh/.config/gh/hosts.yml
+
+# gh-installed agent skills land in ~/.claude/skills at user scope. If stow ever
+# folds ~/.claude into a symlink at this repo, they'd show up here — never commit
+# them; they're per-machine state managed by `gh skill install/update`.
+claude/.claude/skills/
