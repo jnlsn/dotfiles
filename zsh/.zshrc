@@ -1,5 +1,3 @@
-export PATH="$HOME/.local/bin:$HOME/bin:$PATH"
-
 export ZSH="$HOME/.oh-my-zsh"
 
 ZSH_THEME="agnoster"
@@ -8,15 +6,7 @@ COMPLETION_WAITING_DOTS="true"
 
 plugins=(git z npm sudo zsh-autosuggestions zsh-syntax-highlighting)
 
-source $ZSH/oh-my-zsh.sh
+[ -r "$ZSH/oh-my-zsh.sh" ] && source "$ZSH/oh-my-zsh.sh"
 
-export EDITOR='nvim'
-alias vim='nvim'
-alias vi='nvim'
-
-export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-export PATH="$HOME/.local/bin:$PATH"
-
-[ -f /etc/profile.d/ona-secrets.sh ] && . /etc/profile.d/ona-secrets.sh

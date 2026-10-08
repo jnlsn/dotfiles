@@ -1,108 +1,103 @@
 #!/bin/bash
 set -euo pipefail
-
+# Disable inherited tracing before loading secrets.
+set +x
 DOTFILES="$(cd "$(dirname "$0")" && pwd)"
+source "$DOTFILES/lib/common.sh"
+export PATH="$HOME/.local/bin:$HOME/bin:$PATH"
 
-info() { printf '\033[34m[info]\033[0m %s\n' "$1"; }
-skip() { printf '\033[33m[skip]\033[0m %s\n' "$1"; }
-ok()   { printf '\033[32m[ ok ]\033[0m %s\n' "$1"; }
-
-# GNU Stow
-if ! command -v stow &>/dev/null; then
-    info "Installing GNU Stow..."
-    sudo apt-get update -qq && sudo apt-get install -y -qq stow
-    ok "Stow installed"
-else
-    skip "Stow already installed"
+[ "$(uname -s)" = Linux ] || { fail 'This installer supports Linux devcontainers only'; exit 1; }
+if [ -r /etc/profile.d/ona-secrets.sh ]; then
+    source /etc/profile.d/ona-secrets.sh
 fi
+case "$(uname -m)" in
+    x86_64) ARCH=x86_64; ACLI_ARCH=amd64 ;;
+    aarch64) ARCH=aarch64; ACLI_ARCH=arm64 ;;
+    *) fail "Unsupported architecture: $(uname -m)"; exit 1 ;;
+esac
 
-# Zellij
-if ! command -v zellij &>/dev/null; then
-    info "Installing Zellij..."
-    case "$(uname -m)" in
-        x86_64)  ZELLIJ_ARCH="x86_64-unknown-linux-musl" ;;
-        aarch64) ZELLIJ_ARCH="aarch64-unknown-linux-musl" ;;
-        *) echo "Unsupported arch: $(uname -m)" >&2; exit 1 ;;
-    esac
-    mkdir -p "$HOME/.local/bin"
-    tmp="$(mktemp -d)"
-    curl -fsSL -o "$tmp/zellij.tar.gz" \
-        "https://github.com/zellij-org/zellij/releases/latest/download/zellij-${ZELLIJ_ARCH}.tar.gz"
-    tar xzf "$tmp/zellij.tar.gz" -C "$tmp"
-    mv "$tmp/zellij" "$HOME/.local/bin/zellij"
-    rm -rf "$tmp"
-    ok "Zellij installed"
-else
-    skip "Zellij already installed"
+# Establish the tools required by the bootstrap and installed configuration.
+missing=()
+for dep in git curl tar stow zsh jq python3; do
+    command -v "$dep" >/dev/null || missing+=("$dep")
+done
+for dep in realpath; do
+    command -v "$dep" >/dev/null || missing+=(coreutils)
+done
+if ! command -v mountpoint >/dev/null || ! command -v flock >/dev/null; then
+    missing+=(util-linux)
 fi
-
-# Neovim — install the latest stable release rather than the (often ancient)
-# apt package, since the config depends on Lua/LSP APIs from recent versions.
-if ! command -v nvim &>/dev/null; then
-    case "$(uname -m)" in
-        x86_64)  NVIM_ARCH="x86_64" ;;
-        aarch64) NVIM_ARCH="arm64" ;;
-        *) NVIM_ARCH="" ;;
-    esac
-    if [ -n "$NVIM_ARCH" ]; then
-        info "Installing Neovim..."
-        mkdir -p "$HOME/.local/bin"
-        tmp="$(mktemp -d)"
-        # Release asset names have changed across versions (nvim-linux64 →
-        # nvim-linux-<arch>), so resolve the current URL from the GitHub API.
-        nvim_url=$(curl -fsSL https://api.github.com/repos/neovim/neovim/releases/latest \
-            | grep -oE "https://[^\"]*nvim-linux-${NVIM_ARCH}\\.tar\\.gz" | head -1)
-        if [ -n "$nvim_url" ]; then
-            curl -fsSL -o "$tmp/nvim.tar.gz" "$nvim_url"
-            # Extract into a self-contained dir and symlink just the binary onto
-            # PATH; nvim finds its bundled lib/share relative to the real path.
-            rm -rf "$HOME/.local/nvim"
-            mkdir -p "$HOME/.local/nvim"
-            tar xzf "$tmp/nvim.tar.gz" -C "$HOME/.local/nvim" --strip-components=1
-            ln -sf "$HOME/.local/nvim/bin/nvim" "$HOME/.local/bin/nvim"
-            ok "Neovim installed"
-        else
-            skip "Neovim: couldn't resolve latest nvim-linux-${NVIM_ARCH} release asset"
-        fi
-        rm -rf "$tmp"
+if ! /usr/bin/python3 -c "import tomlkit" 2>/dev/null; then
+    missing+=(python3-tomlkit)
+fi
+if [ "${#missing[@]}" -gt 0 ]; then
+    command -v apt-get >/dev/null || { fail "Install required dependencies: ${missing[*]}"; exit 1; }
+    if [ "$(id -u)" = 0 ]; then
+        apt-get update -qq
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${missing[@]}"
     else
-        skip "Neovim: unsupported arch $(uname -m)"
+        command -v sudo >/dev/null && sudo -n true || { fail 'Dependencies require passwordless sudo'; exit 1; }
+        sudo -n apt-get update -qq
+        sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${missing[@]}"
+    fi
+fi
+
+# Download into private staging; cleanup on normal exit, errors and signals.
+umask 077
+work_dir=$(mktemp -d)
+trap 'rm -rf -- "$work_dir"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+mkdir -p "$HOME/.local/bin"
+
+# A fresh install resolves latest releases; reruns never upgrade existing tools.
+# Set ZELLIJ_VERSION or PUP_VERSION to a release tag to choose a version.
+if ! command -v zellij >/dev/null; then
+    zellij_release="${ZELLIJ_VERSION:+download/$ZELLIJ_VERSION}"
+    zellij_release="${zellij_release:-latest/download}"
+    curl -fSL --retry 3 --connect-timeout 15 --max-time 180 \
+        -o "$work_dir/zellij.tar.gz" \
+        "https://github.com/zellij-org/zellij/releases/$zellij_release/zellij-$ARCH-unknown-linux-musl.tar.gz"
+    mkdir "$work_dir/zellij"
+    tar xzf "$work_dir/zellij.tar.gz" -C "$work_dir/zellij"
+    install -m 755 "$work_dir/zellij/zellij" "$HOME/.local/bin/zellij"
+    ok 'Zellij installed'
+else
+    skip 'Zellij already installed'
+fi
+
+if ! command -v pup >/dev/null; then
+    pup_release="${PUP_VERSION:+tags/$PUP_VERSION}"
+    pup_release="${pup_release:-latest}"
+    if pup_json=$(curl -fsSL --retry 3 --connect-timeout 15 --max-time 60 \
+        "https://api.github.com/repos/datadog-labs/pup/releases/$pup_release") &&
+        pup_url=$(printf '%s' "$pup_json" | jq -er --arg suffix "Linux_$ARCH.tar.gz" \
+            '[.assets[] | select(.name | endswith($suffix)) | .browser_download_url][0] // empty'); then
+        if curl -fSL --retry 3 --connect-timeout 15 --max-time 180 -o "$work_dir/pup.tar.gz" "$pup_url"; then
+            mkdir "$work_dir/pup"
+            if tar xzf "$work_dir/pup.tar.gz" -C "$work_dir/pup" && [ -f "$work_dir/pup/pup" ]; then
+                install -m 755 "$work_dir/pup/pup" "$HOME/.local/bin/pup"
+                ok 'pup installed'
+            else
+                skip 'pup archive invalid; rerun to retry'
+            fi
+        else
+            skip 'pup download failed; rerun to retry'
+        fi
+    else
+        skip 'pup release lookup failed; rerun to retry'
     fi
 else
-    skip "Neovim already installed"
+    skip 'pup already installed'
 fi
 
-# Pup (Datadog CLI) — required by the pup Claude plugin's agents/skills,
-# which all shell out to `pup <subcommand>`.
-if ! command -v pup &>/dev/null; then
-    case "$(uname -m)" in
-        x86_64)  PUP_ARCH="x86_64" ;;
-        aarch64) PUP_ARCH="aarch64" ;;
-        *) PUP_ARCH="" ;;
-    esac
-    if [ -n "$PUP_ARCH" ]; then
-        info "Installing pup..."
-        mkdir -p "$HOME/.local/bin"
-        tmp="$(mktemp -d)"
-        # Release assets are versioned (pup_<ver>_Linux_<arch>.tar.gz), so we
-        # resolve the current URL from the GitHub API rather than hardcoding.
-        pup_url=$(curl -fsSL https://api.github.com/repos/datadog-labs/pup/releases/latest \
-            | grep -oE "https://[^\"]*Linux_${PUP_ARCH}\\.tar\\.gz" | head -1)
-        if [ -n "$pup_url" ]; then
-            curl -fsSL -o "$tmp/pup.tar.gz" "$pup_url"
-            tar xzf "$tmp/pup.tar.gz" -C "$tmp"
-            mv "$tmp/pup" "$HOME/.local/bin/pup"
-            ok "pup installed"
-        else
-            skip "pup: couldn't resolve latest Linux_${PUP_ARCH} release asset"
-        fi
-        rm -rf "$tmp"
-    else
-        skip "pup: unsupported arch $(uname -m)"
-    fi
-else
-    skip "pup already installed"
-fi
+# Unfold old Stow directories before applications can write runtime files.
+python3 "$DOTFILES/lib/prepare-stow.py" "$DOTFILES" "$HOME" "${PACKAGES[@]}"
+stow --no-folding --restow --dir "$DOTFILES" --target "$HOME" "${STOW_OPTIONS[@]}" "${PACKAGES[@]}"
+ok 'Dotfiles linked'
+
+# Merge portable Codex preferences; keep its writable state outside Stow.
+/usr/bin/python3 "$DOTFILES/codex/install.py"
 
 # gh stack (GitHub Stacked PRs) — gh extension for managing stacked branches/PRs.
 # Extensions live in ~/.local/share/gh/extensions, so this is per-machine state
@@ -124,12 +119,7 @@ fi
 
 # gh-stack agent skill — teaches Claude Code how to drive `gh stack`.
 # Installed at user scope so it applies in every repo, not just this one.
-#
-# Must run BEFORE the stow step below: `gh skill install` creates
-# ~/.claude/skills/, which makes ~/.claude a real directory and so stops stow
-# from folding the whole of ~/.claude into a symlink at the repo. If it ran
-# after stow on a box with no pre-existing ~/.claude, the skill files would
-# land inside this repo's working tree instead of $HOME.
+# Existing folded directories are migrated before any skill installation.
 if ! command -v gh &>/dev/null; then
     skip "gh-stack skill: gh CLI not available"
 elif ! gh skill --help &>/dev/null; then
@@ -149,13 +139,11 @@ else
     fi
 fi
 
-# Oh My Zsh
+# Oh My Zsh: download separately so a failed curl cannot look successful.
 if [ ! -d "$HOME/.oh-my-zsh" ]; then
-    info "Installing Oh My Zsh..."
-    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
-    ok "Oh My Zsh installed"
-else
-    skip "Oh My Zsh already installed"
+    curl -fsSL --retry 3 --connect-timeout 15 --max-time 60 \
+        -o "$work_dir/oh-my-zsh.sh" https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh
+    KEEP_ZSHRC=yes RUNZSH=no CHSH=no sh "$work_dir/oh-my-zsh.sh" --unattended
 fi
 
 # zsh-autosuggestions
@@ -176,147 +164,27 @@ else
     skip "zsh-syntax-highlighting already installed"
 fi
 
-PACKAGES="claude gh git zsh zellij nvim"
-
-# Back up existing files that would conflict with stow symlinks
-# (e.g. .zshrc from the devcontainer base image, or ~/.config/zellij/config.kdl
-# auto-generated by zellij on first run). Recursively finds every file each
-# package would install and backs up any real file (not symlink) at the target.
-#
-# The `-ef` check skips files already stowed via a parent directory symlink:
-# stow sometimes folds a whole subdir into one symlink (e.g.
-# ~/.claude/statusline -> dotfiles/.../statusline), which leaves the files
-# inside reachable as real files but already equal to src. Without this check,
-# the mv below would rename files *inside the dotfiles repo itself*.
-for pkg in $PACKAGES; do
-    while IFS= read -r -d '' src; do
-        target="$HOME/${src#$DOTFILES/$pkg/}"
-        if [ -f "$target" ] && [ ! -L "$target" ] && ! [ "$target" -ef "$src" ]; then
-            info "Backing up $target to $target.bak"
-            mv "$target" "$target.bak"
-        fi
-    done < <(find "$DOTFILES/$pkg" -mindepth 1 -type f -print0)
-done
-
-info "Stowing dotfiles ($PACKAGES)..."
-cd "$DOTFILES"
-stow -t ~ $PACKAGES
-ok "All packages stowed"
-
-# Set zsh as default shell
-if [ "$(getent passwd "$(id -un)" | cut -d: -f7)" != "/usr/bin/zsh" ]; then
-    info "Setting default shell to zsh..."
-    sudo chsh "$(id -un)" --shell "/usr/bin/zsh"
-    ok "Default shell set to zsh"
-else
-    skip "Default shell already zsh"
-fi
-
-# EFS network directory — persist credentials across Ona instances.
-# Set EFS_MOUNT_POINT in Ona secrets to enable (e.g. /efs).
-EFS_DIR="${EFS_MOUNT_POINT:-}"
-if [ -n "$EFS_DIR" ]; then
-    # EFS may not be mounted yet (dotfiles can run before post-start.sh).
-    # Create symlinks anyway — they'll resolve once the mount completes.
-    info "EFS_MOUNT_POINT=$EFS_DIR — linking credentials (mount may still be in progress)..."
-
-    # Links a file or directory from $HOME to $EFS_DIR. On the first machine
-    # where a file exists locally but not yet on EFS, migrates it over.
-    # On subsequent machines, just creates the symlink.
-    link_to_efs() {
-        local name="$1"
-        local src="$HOME/$name"
-        local dst="$EFS_DIR/$name"
-
-        # Already correct
-        if [ -L "$src" ] && [ "$(readlink "$src")" = "$dst" ]; then
-            return
-        fi
-
-        # Migrate existing file/dir to EFS if destination doesn't exist yet
-        if [ -d "$EFS_DIR" ] && [ ! -e "$dst" ] && [ -e "$src" ] && [ ! -L "$src" ]; then
-            mkdir -p "$(dirname "$dst")"
-            mv "$src" "$dst"
-        fi
-
-        # Remove stale real file/dir or wrong symlink at src
-        if [ -e "$src" ] || [ -L "$src" ]; then
-            rm -rf "$src"
-        fi
-
-        mkdir -p "$(dirname "$src")"
-        ln -s "$dst" "$src"
-    }
-
-    link_to_efs ".claude.json"              # Claude Code OAuth + API key
-    link_to_efs ".claude/.credentials.json"  # Claude Code credentials
-    link_to_efs ".config/gh/hosts.yml"       # GitHub CLI auth
-    link_to_efs ".config/acli"               # Atlassian CLI non-secret config (site, email)
-    link_to_efs ".aws"                       # AWS config
-    link_to_efs ".zsh_history"               # Shell history
-
-    ok "EFS credential symlinks configured"
-else
-    skip "EFS_MOUNT_POINT not set (set it in Ona secrets to enable)"
-fi
-
-# Atlassian CLI auth — auto-authenticate using an API token.
-#
-# ACLI stores the OAuth/API token in the OS keyring (libsecret/DBus), which is
-# per-machine and ephemeral — EFS can only persist the YAML config (site,
-# email), not the token itself. So every fresh Ona instance boots logged out.
-#
-# Fix: set JIRA_API_TOKEN in Ona secrets (same pattern as EFS_MOUNT_POINT).
-# Create a token at https://id.atlassian.com/manage-profile/security/api-tokens.
-# API tokens are long-lived, so one token re-auths every new instance non-
-# interactively.
-JIRA_SITE="${JIRA_SITE:-vanta.atlassian.net}"
-if [ -n "${JIRA_API_TOKEN:-}" ]; then
-    # Install ACLI if missing
-    if ! command -v acli &>/dev/null; then
-        case "$(uname -m)" in
-            x86_64)  ACLI_URL="https://acli.atlassian.com/linux/latest/acli_linux_amd64/acli" ;;
-            aarch64) ACLI_URL="https://acli.atlassian.com/linux/latest/acli_linux_arm64/acli" ;;
-            *) ACLI_URL="" ;;
-        esac
-        if [ -n "$ACLI_URL" ]; then
-            info "Installing ACLI to ~/.local/bin..."
-            mkdir -p "$HOME/.local/bin"
-            curl -fsSL -o "$HOME/.local/bin/acli" "$ACLI_URL"
-            chmod +x "$HOME/.local/bin/acli"
-            export PATH="$HOME/.local/bin:$PATH"
-            ok "ACLI installed"
-        else
-            skip "ACLI install: unsupported arch $(uname -m)"
-        fi
+# Prefer the installed zsh path; no password prompt during Ona startup.
+zsh_path=$(command -v zsh)
+if [ "$(getent passwd "$(id -un)" | cut -d: -f7)" != "$zsh_path" ]; then
+    if [ "$(id -u)" = 0 ]; then
+        chsh --shell "$zsh_path" "$(id -un)"
+    elif command -v sudo >/dev/null && sudo -n chsh --shell "$zsh_path" "$(id -un)"; then
+        ok 'Default shell set to zsh'
+    else
+        skip 'Could not change default shell non-interactively'
     fi
-
-    if command -v acli &>/dev/null; then
-        if acli jira auth status &>/dev/null; then
-            skip "ACLI already authenticated"
-        else
-            JIRA_EMAIL="${JIRA_EMAIL:-$(git config --global --get user.email 2>/dev/null || true)}"
-            if [ -z "$JIRA_EMAIL" ]; then
-                skip "ACLI auth: no email (set JIRA_EMAIL, or git config --global user.email)"
-            else
-                info "Authenticating ACLI as $JIRA_EMAIL @ $JIRA_SITE..."
-                # File redirect, not a pipe — acli reads the token via TTY
-                # handling that breaks with stdin pipes.
-                token_file="$(mktemp)"
-                chmod 600 "$token_file"
-                printf '%s' "$JIRA_API_TOKEN" > "$token_file"
-                if acli jira auth login \
-                        --site "$JIRA_SITE" \
-                        --email "$JIRA_EMAIL" \
-                        --token < "$token_file" &>/dev/null; then
-                    ok "ACLI authenticated"
-                else
-                    info "ACLI auth failed — check JIRA_API_TOKEN is valid and email matches"
-                fi
-                rm -f "$token_file"
-            fi
-        fi
-    fi
-else
-    skip "JIRA_API_TOKEN not set (set it in Ona secrets for auto-ACLI-auth)"
 fi
+
+# Install ACLI here; authenticate after persistence is ready in post-start.
+if [ -n "${JIRA_API_TOKEN:-}" ] && ! command -v acli >/dev/null; then
+    if curl -fSL --retry 3 --connect-timeout 15 --max-time 180 \
+        -o "$work_dir/acli" "https://acli.atlassian.com/linux/latest/acli_linux_$ACLI_ARCH/acli"; then
+        install -m 755 "$work_dir/acli" "$HOME/.local/bin/acli"
+        ok 'ACLI installed'
+    else
+        skip 'ACLI download failed; rerun to retry'
+    fi
+fi
+info 'Installation complete. Ona post-start handles persistence and Jira login.'
+info 'Run ./doctor.sh to check this environment.'

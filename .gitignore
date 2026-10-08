@@ -7,3 +7,13 @@ gh/.config/gh/hosts.yml
 # folds ~/.claude into a symlink at this repo, they'd show up here — never commit
 # them; they're per-machine state managed by `gh skill install/update`.
 claude/.claude/skills/
+
+# Runtime state from older folded Stow installs (migrated out on install).
+claude/.claude/.credentials.json
+claude/.claude/settings.local.json
+claude/.claude/projects/
+claude/.claude/sessions/
+claude/.claude/debug/
+claude/.claude/cache/
+claude/.claude/todos/
+__pycache__/
